@@ -1,0 +1,121 @@
+@echo off
+setlocal EnableDelayedExpansion
+
+:: 1. Datos manuales
+
+:SELECT_EDIFICIO
+echo =====================
+echo  SELECCIONA EDIFICIO
+echo =====================
+echo.
+echo [1] Principal
+echo [2] Servicios y Finanzas
+echo [3] Anexo
+echo.
+
+choice /c 123 /n /m "Selecciona una opcion: "
+
+if errorlevel 3 set EDIFICIO=Anexo
+if errorlevel 2 set EDIFICIO=Servicios y Finanzas
+if errorlevel 1 set EDIFICIO=Principal
+
+:SELECT_PISO
+echo =================
+echo  SELECCIONA PISO
+echo =================
+echo.
+echo [0] PB
+echo [1] 1
+echo [2] 2
+echo [3] 3
+echo .
+
+choice /c 0123 /n /m "Selecciona una opcion: "
+
+if errorlevel 3 set PISO=3
+if errorlevel 2 set PISO=0
+if errorlevel 1 set PISO=1
+if errorlevel 0 set PISO=PB
+
+set /p AREA=Area: 
+
+:: 2. Obtener hostname
+
+set HOSTNAME=%COMPUTERNAME%
+
+:: 3. Obtener IPv4 de la interfz Ethernet
+
+set IP=
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr "IPv4."') do (
+	set IP=%%A
+)
+set IP=%IP: =%
+set IP=%IP: .=%
+
+:: 4. Verificar / Instalar Cortex
+
+set SCRIPT_DIR=\\11ds\Cortex 9\
+set MSI_NAME=AgenteCortexWin9_x64.msi
+set MSI_PATH=%SCRIPT_DIR%%MSI_NAME%
+set CORTEX=No instalado
+
+:: Instalar
+
+if not exist "C:\Program Files\Palo Alto Networks\Traps\cytool.exe" (
+	echo Cortex no encontrado. Instalando...
+	
+	if exist "%MSI_PATH%" (
+		msiexec /i "%MSI_PATH%" /norestart
+	) else (
+		echo ERROR: MSI no encontrado: %MSI_PATH%
+		pause
+		exit /b 1
+	)
+)
+
+:: Esperar a que este disponible
+
+:WAIT_CORTEX
+if not exist "C:\Program Files\Palo Alto Networks\Traps\cytool.exe" (
+	timeout /t 5 >nul
+	goto WAIT_CORTEX
+)
+
+:: Obtener version
+
+if exist "C:\Program Files\Palo Alto Networks\Traps\cytool.exe" (
+	echo Cortex INSTALADO. Obteniendo version...
+	pushd "C:\Program Files\Palo Alto Networks\Traps"
+	for /f "tokens=6" %%A in ('
+		cytool.exe info ^| findstr /i "supervisor tool"
+	') do (
+		set CORTEX=%%A
+	)
+	popd
+)
+
+:: Limpieza de Carriege Return
+
+for /f "delims=" %%B in ("!CORTEX!") do set CORTEX=%%B
+
+:: 5. Mostrar resultados y mantener la ventana abierta
+
+title Información del Equipo
+cls
+echo ========================
+echo  INFORMACION DEL EQUIPO
+echo ========================
+echo.
+echo Edificio  !EDIFICIO!
+echo Piso:     !PISO!
+echo Area:     !AREA!
+echo Hostname: !HOSTNAME!
+echo IP:       !IP!
+echo Cortex:   !CORTEX!
+echo.
+
+:: 6. Guardar en inventario
+
+echo !EDIFICIO!,!PISO!,!AREA!,!HOSTNAME!,!IP!,!CORTEX! >> "\\11ds\Cortex 9\inventario_cortex.txt"
+
+pause >nul
